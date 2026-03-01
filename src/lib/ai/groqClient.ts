@@ -22,13 +22,14 @@ import Groq from "groq-sdk";
 import { z, ZodSchema } from "zod";
 
 const MODEL = "llama-3.3-70b-versatile";
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 60_000;
 
 function getClient(): Groq {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || apiKey === "your_groq_api_key_here") {
+    console.error("[Quizly AI] GROQ_API_KEY is missing or not set. Available env keys:", Object.keys(process.env).filter(k => k.includes("GROQ") || k.includes("NODE")));
     throw new Error(
-      "GROQ_API_KEY is not configured. Set it in .env.local"
+      "GROQ_API_KEY is not configured. Set it as an environment variable."
     );
   }
   return new Groq({ apiKey });
@@ -46,7 +47,7 @@ function getClient(): Groq {
 export async function generateWithGroq<T>(
   prompt: string,
   schema: ZodSchema<T>,
-  retries: number = 1
+  retries: number = 2
 ): Promise<T> {
   const client = getClient();
 

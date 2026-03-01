@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         {
           error: isRateLimit
             ? `Rate limit reached — daily token quota exhausted.${retryHint}`
-            : "AI generation failed",
+            : `AI generation failed: ${message}`,
           message: isRateLimit
             ? "Your Groq free tier (100K tokens/day) has been used up. Wait for the limit to reset or upgrade at console.groq.com."
             : message,

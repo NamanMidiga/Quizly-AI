@@ -23,7 +23,12 @@ async function readDB(): Promise<DB> {
 }
 
 async function writeDB(db: DB): Promise<void> {
-  await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8");
+  try {
+    await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[Quizly AI] Failed to write DB:", err instanceof Error ? err.message : err);
+    // Don't throw — allow the request to continue even if DB write fails
+  }
 }
 
 export async function saveQuiz(id: string, quiz: Quiz): Promise<StoredQuiz> {

@@ -786,7 +786,7 @@ export default function Home() {
                   <div
                     key={oi}
                     className={`quiz-option ${answers[q.id] === opt ? "selected" : ""}`}
-                    onClick={() => setAnswer(q.id, opt)}
+                    onClick={() => setAnswer(q.id, answers[q.id] === opt ? "" : opt)}
                   >
                     <span style={{ width: 22, height: 22, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem", flexShrink: 0, fontWeight: 600, letterSpacing: "0.05em" }}>
                       {String.fromCharCode(65 + oi)}

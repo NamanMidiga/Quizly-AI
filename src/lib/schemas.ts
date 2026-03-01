@@ -57,6 +57,9 @@ export const GenerateRequestSchema = z.object({
   subjectiveCount: z.number().min(0).optional(),     // exact number of subjective questions requested
   mcqDifficulty: z.enum(["easy", "medium", "hard"]).optional(),         // specific difficulty for MCQ questions
   subjectiveDifficulty: z.enum(["easy", "medium", "hard"]).optional(),  // specific difficulty for subjective questions
+  easyCount: z.number().min(0).optional(),           // exact number of easy questions requested
+  mediumCount: z.number().min(0).optional(),         // exact number of medium questions requested
+  hardCount: z.number().min(0).optional(),           // exact number of hard questions requested
 });
 
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;

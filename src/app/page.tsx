@@ -358,17 +358,26 @@ export default function Home() {
     }
 
     // Parse exact question counts and per-type difficulty from the user's prompt
-    // Supports patterns like "3 easy mcq", "2 hard subjective", "5 medium mcq", "3 hard subjective"
+    // Supports patterns like:
+    //   "3 easy mcq 2 hard subjective"  → per-type difficulty
+    //   "5 mcq 5 descriptive 7 hard 3 easy" → standalone difficulty counts spread across types
+    //   "10 questions 7 hard 3 easy" → standalone difficulty counts
     let parsedMcqCount: number | undefined;
     let parsedSubjCount: number | undefined;
     let parsedMcqDifficulty: "easy" | "medium" | "hard" | undefined;
     let parsedSubjDifficulty: "easy" | "medium" | "hard" | undefined;
+    let parsedEasyCount: number | undefined;
+    let parsedMediumCount: number | undefined;
+    let parsedHardCount: number | undefined;
 
     if (prompt) {
-      const mcqMatch = prompt.match(/(\d+)\s+(easy|medium|hard|difficult|tough|simple)\s+mcq/i);
-      const mcqMatchSimple = prompt.match(/(\d+)\s+mcq/i);
-      const subjMatch = prompt.match(/(\d+)\s+(easy|medium|hard|difficult|tough|simple)\s+(?:subjective|descriptive|written|essay)/i);
-      const subjMatchSimple = prompt.match(/(\d+)\s+(?:subjective|descriptive|written|essay)/i);
+      const pl = prompt.toLowerCase();
+
+      // Try per-type difficulty patterns first: "3 easy mcq", "2 hard subjective"
+      const mcqMatch = pl.match(/(\d+)\s+(easy|medium|hard|difficult|tough|simple)\s+mcq/i);
+      const mcqMatchSimple = pl.match(/(\d+)\s+mcq/i);
+      const subjMatch = pl.match(/(\d+)\s+(easy|medium|hard|difficult|tough|simple)\s+(?:subjective|descriptive|written|essay)/i);
+      const subjMatchSimple = pl.match(/(\d+)\s+(?:subjective|descriptive|written|essay)/i);
 
       if (mcqMatch) {
         parsedMcqCount = parseInt(mcqMatch[1]);
@@ -384,6 +393,25 @@ export default function Home() {
         parsedSubjDifficulty = (d === "difficult" || d === "tough") ? "hard" : d === "simple" ? "easy" : d as "easy" | "medium" | "hard";
       } else if (subjMatchSimple) {
         parsedSubjCount = parseInt(subjMatchSimple[1]);
+      }
+
+      // Parse standalone difficulty counts: "7 hard", "3 easy", "5 medium"
+      // Only use these if per-type difficulties were NOT found
+      if (!parsedMcqDifficulty && !parsedSubjDifficulty) {
+        // Match all "N difficulty" patterns (e.g., "7 hard and 3 easy")
+        const diffMatches = [...pl.matchAll(/(\d+)\s+(easy|medium|hard|difficult|tough|simple)(?:\s+(?:questions?|ones?))?/gi)];
+        for (const m of diffMatches) {
+          // Skip if this number+difficulty is part of a type pattern (e.g. "3 easy mcq")
+          const afterMatch = pl.slice((m.index ?? 0) + m[0].length).trimStart();
+          if (/^(?:mcq|subjective|descriptive|written|essay)/i.test(afterMatch)) continue;
+
+          const count = parseInt(m[1]);
+          const d = m[2].toLowerCase();
+          const diff = (d === "difficult" || d === "tough") ? "hard" : d === "simple" ? "easy" : d;
+          if (diff === "easy") parsedEasyCount = (parsedEasyCount || 0) + count;
+          else if (diff === "medium") parsedMediumCount = (parsedMediumCount || 0) + count;
+          else if (diff === "hard") parsedHardCount = (parsedHardCount || 0) + count;
+        }
       }
     }
 
@@ -457,6 +485,9 @@ export default function Home() {
           subjectiveCount: parsedSubjCount,
           mcqDifficulty: parsedMcqDifficulty,
           subjectiveDifficulty: parsedSubjDifficulty,
+          easyCount: parsedEasyCount,
+          mediumCount: parsedMediumCount,
+          hardCount: parsedHardCount,
         }),
       });
 

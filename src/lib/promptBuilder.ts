@@ -105,9 +105,32 @@ export function buildGeneratePrompt(req: GenerateRequest): string {
     }
   }
 
-  // Difficulty tiering — skip if per-type difficulties are already set
+  // Difficulty tiering — handle three cases:
+  // 1. Per-type difficulty (mcqDifficulty / subjectiveDifficulty) — already handled above
+  // 2. Standalone difficulty counts (easyCount / mediumCount / hardCount) — "7 hard 3 easy"
+  // 3. General difficulty (easy / medium / hard / mixed)
   const hasPerTypeDifficulty = req.mcqDifficulty || req.subjectiveDifficulty;
-  if (!hasPerTypeDifficulty) {
+  const hasDifficultyCounts = (req.easyCount != null && req.easyCount > 0) ||
+                               (req.mediumCount != null && req.mediumCount > 0) ||
+                               (req.hardCount != null && req.hardCount > 0);
+
+  if (!hasPerTypeDifficulty && hasDifficultyCounts) {
+    // Standalone difficulty counts — spread across all question types
+    const parts: string[] = [];
+    if (req.easyCount && req.easyCount > 0) parts.push(`exactly ${req.easyCount} EASY`);
+    if (req.mediumCount && req.mediumCount > 0) parts.push(`exactly ${req.mediumCount} MEDIUM`);
+    if (req.hardCount && req.hardCount > 0) parts.push(`exactly ${req.hardCount} HARD`);
+    lines.push(
+      `\nDIFFICULTY DISTRIBUTION (STRICT — follow these counts EXACTLY):` +
+      `\n- Generate ${parts.join(" and ")} questions.` +
+      `\n- Spread the difficulties across ALL question types (MCQ and subjective).` +
+      `\n- Do NOT make all MCQs one difficulty and all subjective another difficulty.` +
+      `\n- Mix the difficulties across both types. For example, if 7 hard and 3 easy out of 5 MCQ + 5 subjective:` +
+      `\n  some MCQs should be hard AND some subjective should be hard, some MCQs should be easy AND some subjective should be easy.` +
+      `\n- The TOTAL count of each difficulty MUST match exactly: ${parts.join(", ")}.` +
+      `\n- Every question MUST have its "difficulty" field set correctly.`
+    );
+  } else if (!hasPerTypeDifficulty) {
     if (req.difficulty === "mixed") {
       lines.push(
         "\nDifficulty distribution: generate a balanced mix of easy, medium, and hard questions. " +

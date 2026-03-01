@@ -180,9 +180,8 @@ export default function Home() {
   const [hints, setHints] = useState<Record<number, string[]>>({}); // questionId -> array of hint strings
   const [hintLoading, setHintLoading] = useState<number | null>(null);
 
-  // File upload
-  const [uploadedContent, setUploadedContent] = useState<string | null>(null);
-  const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
+  // File upload (up to 3 attachments)
+  const [uploadedFiles, setUploadedFiles] = useState<{ content: string; filename: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Error
@@ -297,6 +296,11 @@ export default function Home() {
 
   /* ─── File Upload ─── */
   const handleFileUpload = async (file: File) => {
+    if (uploadedFiles.length >= 3) {
+      setError("Maximum 3 attachments allowed. Remove one to add another.");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -304,8 +308,7 @@ export default function Home() {
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
       if (res.ok) {
-        setUploadedContent(data.text);
-        setUploadedFilename(data.filename);
+        setUploadedFiles((prev) => [...prev, { content: data.text, filename: data.filename }]);
         setError(null);
       } else {
         setError(data.error || "Upload failed");
@@ -327,7 +330,7 @@ export default function Home() {
 
   const generateQuiz = async () => {
     const prompt = inputValue.trim();
-    if (!prompt && !uploadedContent) {
+    if (!prompt && uploadedFiles.length === 0) {
       setError("Please enter a topic or upload content first.");
       return;
     }
@@ -395,15 +398,21 @@ export default function Home() {
         parsedSubjCount = parseInt(subjMatchSimple[1]);
       }
 
-      // Parse standalone difficulty counts: "7 hard", "3 easy", "5 medium"
+      // Parse standalone difficulty counts: "7 hard", "3 easy", "7 should be hard", "3 of them easy"
       // Only use these if per-type difficulties were NOT found
       if (!parsedMcqDifficulty && !parsedSubjDifficulty) {
-        // Match all "N difficulty" patterns (e.g., "7 hard and 3 easy")
-        const diffMatches = [...pl.matchAll(/(\d+)\s+(easy|medium|hard|difficult|tough|simple)(?:\s+(?:questions?|ones?))?/gi)];
+        // Match patterns like:
+        //   "7 hard", "3 easy", "5 medium questions"
+        //   "7 should be hard", "3 of them should be easy"
+        //   "7 of them hard", "3 are easy"
+        const diffMatches = [...pl.matchAll(/(\d+)\s+(?:of\s+them\s+)?(?:should\s+be\s+|are\s+|being\s+)?(easy|medium|hard|difficult|tough|simple)(?:\s+(?:questions?|ones?))?/gi)];
         for (const m of diffMatches) {
           // Skip if this number+difficulty is part of a type pattern (e.g. "3 easy mcq")
           const afterMatch = pl.slice((m.index ?? 0) + m[0].length).trimStart();
-          if (/^(?:mcq|subjective|descriptive|written|essay)/i.test(afterMatch)) continue;
+          if (/^(?:mcq|mcqs|subjective|descriptive|written|essay|multiple)/i.test(afterMatch)) continue;
+
+          // Also skip if this is "10 questions" being partially matched
+          if (/^questions?\b/i.test(afterMatch)) continue;
 
           const count = parseInt(m[1]);
           const d = m[2].toLowerCase();
@@ -431,7 +440,9 @@ export default function Home() {
     })();
 
     // If input is a YouTube URL, fetch the transcript first
-    let contentToSend = uploadedContent || undefined;
+    let contentToSend = uploadedFiles.length > 0
+      ? uploadedFiles.map((f) => `--- ${f.filename} ---\n${f.content}`).join("\n\n")
+      : undefined;
     let promptToSend: string | undefined = prompt || undefined;
 
     if (prompt && isYouTubeUrl(prompt)) {
@@ -503,8 +514,7 @@ export default function Home() {
         setView("quiz");
         startTimer(data.quiz.timeMinutes || (isTest ? 30 : 10));
         setInputValue("");
-        setUploadedContent(null);
-        setUploadedFilename(null);
+        setUploadedFiles([]);
         loadHistory();
       } else {
         setError(data.error || data.message || "Quiz generation failed");
@@ -683,17 +693,26 @@ export default function Home() {
         <h1 className="title-glow">QUIZLY AI</h1>
         <div className="subtitle">BYTE BUSTERS</div>
 
-        {/* Upload indicator */}
-        {uploadedFilename && (
-          <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 8 }}>
-            <i className="fa-solid fa-file" style={{ color: "rgba(150,180,255,0.5)" }} />
-            <span style={{ color: "#aaa", fontSize: "0.8rem" }}>{uploadedFilename}</span>
-            <button
-              onClick={() => { setUploadedContent(null); setUploadedFilename(null); }}
-              style={{ background: "none", border: "none", color: "rgba(150,180,255,0.4)", cursor: "pointer", fontSize: "0.8rem" }}
-            >
-              ✕
-            </button>
+        {/* Upload indicators */}
+        {uploadedFiles.length > 0 && (
+          <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+            {uploadedFiles.map((f, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <i className="fa-solid fa-file" style={{ color: "rgba(150,180,255,0.5)" }} />
+                <span style={{ color: "#aaa", fontSize: "0.8rem" }}>{f.filename}</span>
+                <button
+                  onClick={() => setUploadedFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  style={{ background: "none", border: "none", color: "rgba(150,180,255,0.4)", cursor: "pointer", fontSize: "0.8rem" }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {uploadedFiles.length < 3 && (
+              <div style={{ fontSize: "0.65rem", color: "rgba(150,180,255,0.3)", marginTop: 2 }}>
+                {3 - uploadedFiles.length} more attachment{3 - uploadedFiles.length !== 1 ? "s" : ""} allowed
+              </div>
+            )}
           </div>
         )}
 
@@ -717,10 +736,16 @@ export default function Home() {
             ref={fileInputRef}
             type="file"
             accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.webp"
+            multiple
             style={{ display: "none" }}
             onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFileUpload(file);
+              const files = e.target.files;
+              if (files) {
+                const remaining = 3 - uploadedFiles.length;
+                const toUpload = Array.from(files).slice(0, remaining);
+                toUpload.forEach((file) => handleFileUpload(file));
+              }
+              e.target.value = ""; // reset so same file can be selected again
             }}
           />
           <input
@@ -1202,29 +1227,6 @@ export default function Home() {
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <div className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <h2>Quiz History</h2>
-
-        {/* Dashboard button */}
-        <div
-          style={{
-            marginBottom: 20,
-            padding: "14px 16px",
-            borderRadius: 14,
-            background: "linear-gradient(135deg, rgba(100,140,255,0.08), rgba(120,80,255,0.06))",
-            border: "1px solid rgba(100,140,255,0.18)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            transition: "all 0.25s ease",
-          }}
-          onClick={fetchDashboard}
-        >
-          <i className="fa-solid fa-chart-line" style={{ color: "rgba(120,160,255,0.6)", fontSize: "1rem" }} />
-          <div>
-            <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#ddd", letterSpacing: "0.5px" }}>Dashboard</div>
-            <div style={{ fontSize: "0.6rem", color: "rgba(150,180,255,0.35)", marginTop: 2 }}>Analytics & Progress</div>
-          </div>
-        </div>
 
         {quizHistory.length === 0 ? (
           <p style={{ color: "rgba(100,130,255,0.35)", fontSize: "0.75rem" }}>No quizzes yet. Generate one!</p>

@@ -99,8 +99,57 @@ interface ExplanationResult {
   memoryTip?: string;
 }
 
+/* ─── Dashboard types ─── */
+interface DashboardTopicMastery {
+  topic: string;
+  correct: number;
+  total: number;
+  accuracy: number;
+  attempts: number;
+}
+
+interface DashboardTrendPoint {
+  date: string;
+  percentage: number;
+}
+
+interface DashboardRecentAttempt {
+  quizTitle: string;
+  date: string;
+  percentage: number;
+  totalScore: number;
+  maxScore: number;
+  difficulty: string;
+  mode: string;
+}
+
+interface DashboardAIRecommendations {
+  studyPlan: string;
+  priorityTopics: string[];
+  dailyGoal: string;
+  motivationalNote: string;
+  predictedImprovement: string;
+}
+
+interface DashboardData {
+  overview: {
+    totalQuizzes: number;
+    totalQuestions: number;
+    totalCorrect: number;
+    overallAccuracy: number;
+    improvementTrend: string;
+  };
+  topicMastery: DashboardTopicMastery[];
+  weakTopics: DashboardTopicMastery[];
+  strongTopics: DashboardTopicMastery[];
+  mediumTopics: DashboardTopicMastery[];
+  trendData: DashboardTrendPoint[];
+  recentAttempts: DashboardRecentAttempt[];
+  aiRecommendations: DashboardAIRecommendations | null;
+}
+
 /* ─── View states ─── */
-type View = "home" | "loading" | "quiz" | "grading" | "results" | "analytics";
+type View = "home" | "loading" | "quiz" | "grading" | "results" | "analytics" | "dashboard";
 
 export default function Home() {
   /* ─── State ─── */
@@ -138,6 +187,10 @@ export default function Home() {
 
   // Error
   const [error, setError] = useState<string | null>(null);
+
+  // Dashboard
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
 
   // Timer
   const [timeLeft, setTimeLeft] = useState<number>(0); // seconds remaining
@@ -263,6 +316,10 @@ export default function Home() {
   };
 
   /* ─── Generate Quiz ─── */
+  const isYouTubeUrl = (text: string): boolean => {
+    return /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)/i.test(text);
+  };
+
   const generateQuiz = async () => {
     const prompt = inputValue.trim();
     if (!prompt && !uploadedContent) {
@@ -276,22 +333,126 @@ export default function Home() {
     // Normal mode: quick casual quiz (MCQ only, 5 questions, no negative marking, no strict timer)
     // Test mode: full exam simulation (mixed MCQ + subjective, 15 questions, negative marking, strict timer)
     const isTest = mode === "test";
-    const numQuestions = isTest ? 15 : 5;
-    const questionTypes: ("mcq" | "subjective")[] = isTest ? ["mcq", "subjective"] : ["mcq"];
+
+    // Detect if user explicitly wants subjective questions in their prompt
+    const wantsSubjective = /\b(subjective|descriptive|written|short.?answer|long.?answer|explain|essay|write|paragraph|brief|elaborat)/i.test(prompt);
+    // Detect if user explicitly wants only MCQ
+    const wantsMcqOnly = /\b(only\s*mcq|mcq\s*only|just\s*mcq|all\s*mcq|no\s*subjective)\b/i.test(prompt);
+    // Detect if user wants a mix
+    const wantsMix = /\b(mix|both|mcq\s*(and|&|with)\s*subjective|subjective\s*(and|&|with)\s*mcq)\b/i.test(prompt);
+
+    let questionTypes: ("mcq" | "subjective")[];
+    if (isTest) {
+      questionTypes = ["mcq", "subjective"];
+    } else if (wantsMcqOnly) {
+      questionTypes = ["mcq"];
+    } else if (wantsSubjective || wantsMix) {
+      questionTypes = ["mcq", "subjective"];
+    } else {
+      questionTypes = ["mcq"];
+    }
+
+    // Parse exact question counts and per-type difficulty from the user's prompt
+    // Supports patterns like "3 easy mcq", "2 hard subjective", "5 medium mcq", "3 hard subjective"
+    let parsedMcqCount: number | undefined;
+    let parsedSubjCount: number | undefined;
+    let parsedMcqDifficulty: "easy" | "medium" | "hard" | undefined;
+    let parsedSubjDifficulty: "easy" | "medium" | "hard" | undefined;
+
+    if (prompt) {
+      const mcqMatch = prompt.match(/(\d+)\s+(easy|medium|hard|difficult|tough|simple)\s+mcq/i);
+      const mcqMatchSimple = prompt.match(/(\d+)\s+mcq/i);
+      const subjMatch = prompt.match(/(\d+)\s+(easy|medium|hard|difficult|tough|simple)\s+(?:subjective|descriptive|written|essay)/i);
+      const subjMatchSimple = prompt.match(/(\d+)\s+(?:subjective|descriptive|written|essay)/i);
+
+      if (mcqMatch) {
+        parsedMcqCount = parseInt(mcqMatch[1]);
+        const d = mcqMatch[2].toLowerCase();
+        parsedMcqDifficulty = (d === "difficult" || d === "tough") ? "hard" : d === "simple" ? "easy" : d as "easy" | "medium" | "hard";
+      } else if (mcqMatchSimple) {
+        parsedMcqCount = parseInt(mcqMatchSimple[1]);
+      }
+
+      if (subjMatch) {
+        parsedSubjCount = parseInt(subjMatch[1]);
+        const d = subjMatch[2].toLowerCase();
+        parsedSubjDifficulty = (d === "difficult" || d === "tough") ? "hard" : d === "simple" ? "easy" : d as "easy" | "medium" | "hard";
+      } else if (subjMatchSimple) {
+        parsedSubjCount = parseInt(subjMatchSimple[1]);
+      }
+    }
+
+    const numQuestions = (() => {
+      if (prompt) {
+        // Explicit total like "4 questions"
+        const totalMatch = prompt.match(/(\d+)\s*questions/i);
+        if (totalMatch) return Math.min(Math.max(parseInt(totalMatch[1]), 1), 50);
+
+        // Sum up individual counts like "7 mcq and 3 subjective"
+        if (parsedMcqCount != null || parsedSubjCount != null) {
+          const total = (parsedMcqCount || 0) + (parsedSubjCount || 0);
+          if (total > 0) return Math.min(total, 50);
+        }
+      }
+      return isTest ? 15 : 5;
+    })();
+
+    // If input is a YouTube URL, fetch the transcript first
+    let contentToSend = uploadedContent || undefined;
+    let promptToSend: string | undefined = prompt || undefined;
+
+    if (prompt && isYouTubeUrl(prompt)) {
+      try {
+        const transcribeRes = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: prompt }),
+        });
+
+        const transcribeData = await transcribeRes.json();
+
+        if (!transcribeRes.ok) {
+          setError(transcribeData.error || "Could not process YouTube link.");
+          setView("home");
+          return;
+        }
+
+        if (transcribeData.transcript) {
+          // Captions available — use full transcript
+          contentToSend = transcribeData.transcript;
+          promptToSend = `Generate a quiz based on this YouTube video transcript from "${transcribeData.title || "a video"}". Focus on the key concepts, facts, and topics discussed.`;
+        } else if (transcribeData.title) {
+          // No captions — use video title/author so Groq generates from its knowledge
+          promptToSend = `Generate a quiz about the topic of this YouTube video: "${transcribeData.title}" by ${transcribeData.author || "unknown creator"}. Use your knowledge to create questions about the subject matter this video covers. Make the questions educational and relevant to the video's topic.`;
+        } else {
+          setError("Could not fetch any info from this YouTube link. Try another video.");
+          setView("home");
+          return;
+        }
+      } catch {
+        setError("Failed to process YouTube link. Please check the URL and try again.");
+        setView("home");
+        return;
+      }
+    }
 
     try {
       const res = await fetch("/api/quiz/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: prompt || undefined,
-          content: uploadedContent || undefined,
+          prompt: promptToSend,
+          content: contentToSend,
           numQuestions,
           questionTypes,
-          difficulty: isTest ? "mixed" : "easy",
+          difficulty: isTest ? "mixed" : (prompt && /\b(hard|medium|difficult|tough|mixed)\b/i.test(prompt) ? "mixed" : "easy"),
           timeMinutes: isTest ? 30 : 10,
           negativeMark: isTest ? 0.25 : 0,
           examPattern: isTest ? "exam" : undefined,
+          mcqCount: parsedMcqCount,
+          subjectiveCount: parsedSubjCount,
+          mcqDifficulty: parsedMcqDifficulty,
+          subjectiveDifficulty: parsedSubjDifficulty,
         }),
       });
 
@@ -435,6 +596,27 @@ export default function Home() {
     setSidebarOpen(false);
   };
 
+  /* ─── Fetch Dashboard Data ─── */
+  const fetchDashboard = async () => {
+    setDashboardLoading(true);
+    setView("dashboard");
+    setSidebarOpen(false);
+
+    try {
+      const res = await fetch("/api/quiz/dashboard");
+      if (res.ok) {
+        const data = await res.json();
+        setDashboardData(data);
+      } else {
+        setError("Failed to load dashboard data");
+      }
+    } catch {
+      setError("Network error loading dashboard");
+    } finally {
+      setDashboardLoading(false);
+    }
+  };
+
   /* ─── Handle Enter key ─── */
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && inputValue.trim()) {
@@ -457,8 +639,8 @@ export default function Home() {
       <button className="nav-btn btn-menu" aria-label="Menu" onClick={() => setSidebarOpen(true)}>
         <i className="fa-solid fa-bars" />
       </button>
-      <button className="nav-btn btn-profile" aria-label="Profile">
-        <i className="fa-solid fa-user" />
+      <button className="nav-btn btn-profile" aria-label="Dashboard" onClick={fetchDashboard}>
+        <i className="fa-solid fa-chart-line" />
       </button>
 
       {/* Glass Card */}
@@ -469,11 +651,11 @@ export default function Home() {
         {/* Upload indicator */}
         {uploadedFilename && (
           <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 8 }}>
-            <i className="fa-solid fa-file" style={{ color: "#888" }} />
+            <i className="fa-solid fa-file" style={{ color: "rgba(150,180,255,0.5)" }} />
             <span style={{ color: "#aaa", fontSize: "0.8rem" }}>{uploadedFilename}</span>
             <button
               onClick={() => { setUploadedContent(null); setUploadedFilename(null); }}
-              style={{ background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: "0.8rem" }}
+              style={{ background: "none", border: "none", color: "rgba(150,180,255,0.4)", cursor: "pointer", fontSize: "0.8rem" }}
             >
               ✕
             </button>
@@ -509,7 +691,7 @@ export default function Home() {
           <input
             type="text"
             className="input-field"
-            placeholder={isListening ? "Listening..." : "Ask Quizly anything..."}
+            placeholder={isListening ? "Listening..." : "Topic, question, or YouTube link..."}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
@@ -538,8 +720,8 @@ export default function Home() {
   const renderLoading = () => (
     <div className="glass-card" style={{ justifyContent: "center", alignItems: "center", gap: 20 }}>
       <div className="loading-spinner" style={{ width: 40, height: 40 }} />
-      <p style={{ color: "#888", fontSize: "0.9rem", letterSpacing: 2 }}>GENERATING QUIZ...</p>
-      <p style={{ color: "#555", fontSize: "0.7rem" }}>Powered by Groq LLaMA 3.3 70B</p>
+      <p style={{ color: "rgba(150,180,255,0.5)", fontSize: "0.9rem", letterSpacing: 2 }}>GENERATING QUIZ...</p>
+      <p style={{ color: "rgba(100,130,255,0.35)", fontSize: "0.7rem" }}>Powered by Groq LLaMA 3.3 70B</p>
     </div>
   );
 
@@ -554,11 +736,11 @@ export default function Home() {
             <i className="fa-solid fa-xmark" />
           </button>
           <div className="quiz-topbar-info">
-            <span style={{ fontSize: "0.75rem", color: "#888" }}>
+            <span style={{ fontSize: "0.75rem", color: "rgba(150,180,255,0.5)" }}>
               {answeredCount}/{quiz.questions.length} answered
             </span>
-            <span style={{ fontSize: "0.7rem", color: "#555" }}>&bull;</span>
-            <span style={{ fontSize: "0.75rem", color: "#888" }}>{quiz.totalMarks} marks</span>
+            <span style={{ fontSize: "0.7rem", color: "rgba(100,130,255,0.3)" }}>&bull;</span>
+            <span style={{ fontSize: "0.75rem", color: "rgba(150,180,255,0.5)" }}>{quiz.totalMarks} marks</span>
           </div>
           <div className={`quiz-timer ${isUrgent ? "urgent" : ""}`}>
             <i className="fa-solid fa-clock" style={{ fontSize: "0.7rem" }} />
@@ -568,8 +750,8 @@ export default function Home() {
 
         {/* Quiz title */}
         <div style={{ padding: "0 40px", marginBottom: 20 }}>
-          <h2 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fdfaf0" }}>{quiz.title}</h2>
-          <p style={{ fontSize: "0.7rem", color: "#555", marginTop: 4, letterSpacing: 1 }}>
+          <h2 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff", letterSpacing: "0.1em" }}>{quiz.title}</h2>
+          <p style={{ fontSize: "0.7rem", color: "rgba(100,130,255,0.35)", marginTop: 4, letterSpacing: "0.15em" }}>
             {quiz.description} {mode === "test" && " • TEST MODE"}
           </p>
         </div>
@@ -585,10 +767,10 @@ export default function Home() {
             return (
             <div className="quiz-question" key={q.id}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                <span style={{ fontSize: "0.65rem", color: "#666" }}>
+                <span style={{ fontSize: "0.65rem", color: "rgba(150,180,255,0.4)" }}>
                   Q{idx + 1} &bull; {q.marks} marks
                   {hintsCount > 0 && (
-                    <span style={{ color: "rgba(253,250,240,0.5)" }}> (max {effectiveMax} after {hintsCount} hint{hintsCount > 1 ? "s" : ""})</span>
+                    <span style={{ color: "rgba(120,160,255,0.5)" }}> (max {effectiveMax} after {hintsCount} hint{hintsCount > 1 ? "s" : ""})</span>
                   )}
                 </span>
                 <span className={`badge-${q.difficulty}`}>{q.difficulty.toUpperCase()}</span>
@@ -602,7 +784,7 @@ export default function Home() {
                     className={`quiz-option ${answers[q.id] === opt ? "selected" : ""}`}
                     onClick={() => setAnswer(q.id, opt)}
                   >
-                    <span style={{ width: 20, height: 20, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", flexShrink: 0 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem", flexShrink: 0, fontWeight: 600, letterSpacing: "0.05em" }}>
                       {String.fromCharCode(65 + oi)}
                     </span>
                     {opt}
@@ -651,7 +833,7 @@ export default function Home() {
                     )}
                   </button>
                   {hintsCount > 0 && (
-                    <span style={{ fontSize: "0.6rem", color: "#666" }}>
+                    <span style={{ fontSize: "0.6rem", color: "rgba(150,180,255,0.4)" }}>
                       {hintsCount} used &bull; max marks: {effectiveMax}/{q.marks}
                     </span>
                   )}
@@ -676,7 +858,7 @@ export default function Home() {
     <div className="quiz-overlay">
       <div className="quiz-panel" style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
         <div className="loading-spinner" style={{ width: 40, height: 40 }} />
-        <p style={{ color: "#888", fontSize: "0.9rem", letterSpacing: 2, marginTop: 20 }}>GRADING...</p>
+        <p style={{ color: "rgba(150,180,255,0.5)", fontSize: "0.9rem", letterSpacing: 2, marginTop: 20 }}>GRADING...</p>
       </div>
     </div>
   );
@@ -696,7 +878,7 @@ export default function Home() {
               {gradeResult.totalScore} / {gradeResult.maxScore}
             </div>
             <div className="grade-percentage">{gradeResult.percentage.toFixed(1)}%</div>
-            <p style={{ color: "#888", fontSize: "0.8rem", marginTop: 10, lineHeight: 1.6 }}>{gradeResult.summary}</p>
+            <p style={{ color: "rgba(150,180,255,0.5)", fontSize: "0.8rem", marginTop: 10, lineHeight: 1.6 }}>{gradeResult.summary}</p>
           </div>
 
           {/* Per-question feedback */}
@@ -721,7 +903,7 @@ export default function Home() {
                   </p>
                 )}
                 {r.improvements && (
-                  <p style={{ fontSize: "0.7rem", color: "rgba(253,250,240,0.6)", marginTop: 3 }}>
+                  <p style={{ fontSize: "0.7rem", color: "rgba(120,160,255,0.6)", marginTop: 3 }}>
                     <strong>Improve:</strong> {r.improvements}
                   </p>
                 )}
@@ -746,7 +928,7 @@ export default function Home() {
 
                 {/* Explanation display */}
                 {expl && (
-                  <div style={{ marginTop: 12, padding: 15, background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ marginTop: 12, padding: 18, background: "rgba(100,140,255,0.04)", borderRadius: 16, border: "1px solid rgba(100,140,255,0.1)", backdropFilter: "blur(10px)" }}>
                     <p style={{ fontSize: "0.8rem", color: "#ddd", lineHeight: 1.7 }}>{expl.explanation}</p>
                     {expl.whyCorrect && (
                       <p style={{ fontSize: "0.7rem", color: "#22c55e", marginTop: 8 }}>
@@ -754,12 +936,12 @@ export default function Home() {
                       </p>
                     )}
                     {expl.memoryTip && (
-                      <p style={{ fontSize: "0.7rem", color: "rgba(253,250,240,0.6)", marginTop: 5 }}>
+                      <p style={{ fontSize: "0.7rem", color: "rgba(120,160,255,0.6)", marginTop: 5 }}>
                         <strong>💡 Tip:</strong> {expl.memoryTip}
                       </p>
                     )}
                     {expl.relatedTopics && expl.relatedTopics.length > 0 && (
-                      <p style={{ fontSize: "0.65rem", color: "#666", marginTop: 5 }}>
+                      <p style={{ fontSize: "0.65rem", color: "rgba(100,130,255,0.35)", marginTop: 5 }}>
                         Related: {expl.relatedTopics.join(", ")}
                       </p>
                     )}
@@ -792,13 +974,225 @@ export default function Home() {
     );
   };
 
+  const renderDashboard = () => {
+    const d = dashboardData;
+
+    return (
+      <div className="dashboard-fullscreen">
+        {/* Top bar */}
+        <div className="dashboard-topbar">
+          <button className="btn-close-inline" onClick={() => setView("home")}>
+            <i className="fa-solid fa-xmark" />
+          </button>
+          <h1>
+            <i className="fa-solid fa-chart-line" style={{ marginRight: 10, fontSize: "0.8rem" }} />
+            DASHBOARD
+          </h1>
+          <div />
+        </div>
+
+        <div className="dashboard-scroll">
+          {/* Loading state */}
+          {dashboardLoading && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, gap: 20 }}>
+              <div className="loading-spinner" style={{ width: 40, height: 40 }} />
+              <p style={{ color: "rgba(150,180,255,0.5)", fontSize: "0.85rem", letterSpacing: 2 }}>LOADING DASHBOARD...</p>
+              <p style={{ color: "rgba(100,130,255,0.3)", fontSize: "0.65rem" }}>Analyzing your quiz performance</p>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!dashboardLoading && (!d || d.overview.totalQuizzes === 0) && (
+            <div className="dash-empty">
+              <i className="fa-solid fa-chart-pie" />
+              <p>No quiz data yet.<br />Take some quizzes to see your analytics here!</p>
+              <button className="btn-primary" style={{ marginTop: 25 }} onClick={() => setView("home")}>
+                START A QUIZ
+              </button>
+            </div>
+          )}
+
+          {/* Dashboard content */}
+          {!dashboardLoading && d && d.overview.totalQuizzes > 0 && (
+            <>
+              {/* ── Overview Stats ── */}
+              <div className="dash-stats-grid">
+                <div className="dash-stat-card">
+                  <div className="stat-icon"><i className="fa-solid fa-clipboard-list" /></div>
+                  <div className="stat-value">{d.overview.totalQuizzes}</div>
+                  <div className="stat-label">Quizzes Taken</div>
+                </div>
+                <div className="dash-stat-card">
+                  <div className="stat-icon"><i className="fa-solid fa-circle-question" /></div>
+                  <div className="stat-value">{d.overview.totalQuestions}</div>
+                  <div className="stat-label">Questions Answered</div>
+                </div>
+                <div className="dash-stat-card">
+                  <div className="stat-icon"><i className="fa-solid fa-bullseye" /></div>
+                  <div className="stat-value">{d.overview.overallAccuracy}%</div>
+                  <div className="stat-label">Overall Accuracy</div>
+                </div>
+                <div className="dash-stat-card">
+                  <div className="stat-icon"><i className="fa-solid fa-check-double" /></div>
+                  <div className="stat-value">{d.overview.totalCorrect}</div>
+                  <div className="stat-label">Correct Answers</div>
+                </div>
+              </div>
+
+              {/* ── Weak / Strong Topics ── */}
+              <div className="dash-two-col">
+                <div className="dash-section">
+                  <div className="dash-section-title">
+                    <i className="fa-solid fa-triangle-exclamation" />
+                    Weak Topics
+                  </div>
+                  {d.weakTopics.length === 0 ? (
+                    <p style={{ fontSize: "0.75rem", color: "rgba(150,180,255,0.3)" }}>No weak topics — great job! 🎉</p>
+                  ) : (
+                    <div className="dash-chip-grid">
+                      {d.weakTopics.map((t, i) => (
+                        <div key={i} className="dash-chip chip-weak">
+                          <span>{t.topic}</span>
+                          <span className="chip-pct">{t.accuracy}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="dash-section">
+                  <div className="dash-section-title">
+                    <i className="fa-solid fa-trophy" />
+                    Strong Topics
+                  </div>
+                  {d.strongTopics.length === 0 ? (
+                    <p style={{ fontSize: "0.75rem", color: "rgba(150,180,255,0.3)" }}>Take more quizzes to identify strengths</p>
+                  ) : (
+                    <div className="dash-chip-grid">
+                      {d.strongTopics.map((t, i) => (
+                        <div key={i} className="dash-chip chip-strong">
+                          <span>{t.topic}</span>
+                          <span className="chip-pct">{t.accuracy}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── AI Study Recommendations ── */}
+              {d.aiRecommendations && (
+                <div className="dash-section">
+                  <div className="dash-ai-card">
+                    <div className="ai-title">
+                      <i className="fa-solid fa-wand-magic-sparkles" />
+                      AI Study Recommendations
+                    </div>
+
+                    <div className="dash-ai-section">
+                      <div className="dash-ai-label">Study Plan</div>
+                      <div className="dash-ai-text">{d.aiRecommendations.studyPlan}</div>
+                    </div>
+
+                    <div className="dash-ai-section">
+                      <div className="dash-ai-label">Priority Topics</div>
+                      <div className="dash-ai-chip-list">
+                        {d.aiRecommendations.priorityTopics.map((t, i) => (
+                          <span key={i} className="dash-ai-chip">{t}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="dash-ai-section">
+                      <div className="dash-ai-label">Daily Goal</div>
+                      <div className="dash-ai-text">{d.aiRecommendations.dailyGoal}</div>
+                    </div>
+
+                    <div className="dash-ai-section">
+                      <div className="dash-ai-label">Predicted Improvement</div>
+                      <div className="dash-ai-text">{d.aiRecommendations.predictedImprovement}</div>
+                    </div>
+
+                    <div style={{ marginTop: 18, padding: "12px 18px", borderRadius: 14, background: "rgba(100,140,255,0.05)", border: "1px solid rgba(100,140,255,0.1)" }}>
+                      <div className="dash-ai-text" style={{ fontStyle: "italic", color: "rgba(180,200,255,0.7)" }}>
+                        💡 {d.aiRecommendations.motivationalNote}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Recent Attempts ── */}
+              {d.recentAttempts.length > 0 && (
+                <div className="dash-section">
+                  <div className="dash-section-title">
+                    <i className="fa-solid fa-clock-rotate-left" />
+                    Recent Attempts
+                  </div>
+                  <div className="dash-recent-list">
+                    {d.recentAttempts.map((a, i) => {
+                      const scoreCls = a.percentage >= 75 ? "score-high" : a.percentage >= 50 ? "score-mid" : "score-low";
+                      return (
+                        <div className="dash-recent-item" key={i}>
+                          <div>
+                            <div className="dash-recent-title">{a.quizTitle}</div>
+                            <div className="dash-recent-meta">
+                              {new Date(a.date).toLocaleDateString()} &bull; {a.totalScore}/{a.maxScore} marks &bull; {a.mode}
+                            </div>
+                          </div>
+                          <div className={`dash-recent-score ${scoreCls}`}>
+                            {Math.round(a.percentage)}%
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Back button */}
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 20 }}>
+                <button className="btn-primary" onClick={() => setView("home")}>
+                  BACK TO HOME
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderSidebar = () => (
     <>
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <div className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <h2>Quiz History</h2>
+
+        {/* Dashboard button */}
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "14px 16px",
+            borderRadius: 14,
+            background: "linear-gradient(135deg, rgba(100,140,255,0.08), rgba(120,80,255,0.06))",
+            border: "1px solid rgba(100,140,255,0.18)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            transition: "all 0.25s ease",
+          }}
+          onClick={fetchDashboard}
+        >
+          <i className="fa-solid fa-chart-line" style={{ color: "rgba(120,160,255,0.6)", fontSize: "1rem" }} />
+          <div>
+            <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#ddd", letterSpacing: "0.5px" }}>Dashboard</div>
+            <div style={{ fontSize: "0.6rem", color: "rgba(150,180,255,0.35)", marginTop: 2 }}>Analytics & Progress</div>
+          </div>
+        </div>
+
         {quizHistory.length === 0 ? (
-          <p style={{ color: "#555", fontSize: "0.75rem" }}>No quizzes yet. Generate one!</p>
+          <p style={{ color: "rgba(100,130,255,0.35)", fontSize: "0.75rem" }}>No quizzes yet. Generate one!</p>
         ) : (
           quizHistory.map((sq) => (
             <div key={sq.id} className="quiz-history-item" onClick={() => loadQuiz(sq)}>
@@ -818,12 +1212,32 @@ export default function Home() {
   /* ─── Main Render ─── */
   return (
     <>
+      {/* Dynamic Fluid Wavy Background */}
+      <div className="fluid-background">
+        <div className="gradient-layer" />
+        <svg viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+          <filter id="canvasNoise">
+            <feTurbulence type="fractalNoise" baseFrequency="0.0015" numOctaves="3" stitchTiles="stitch" />
+          </filter>
+          <rect width="100%" height="100%" filter="url(#canvasNoise)" />
+          <path fill="#0d1025">
+            <animate
+              attributeName="d"
+              dur="20s"
+              repeatCount="indefinite"
+              values="M0,500 C200,300 400,700 600,500 C800,300 1000,700 1000,500 L1000,1000 L0,1000 Z;M0,500 C200,700 400,300 600,500 C800,700 1000,300 1000,500 L1000,1000 L0,1000 Z;M0,500 C200,300 400,700 600,500 C800,300 1000,700 1000,500 L1000,1000 L0,1000 Z"
+            />
+          </path>
+        </svg>
+      </div>
+
       {renderSidebar()}
       {view === "home" && renderHome()}
       {view === "loading" && renderLoading()}
       {view === "quiz" && renderQuiz()}
       {view === "grading" && renderGrading()}
       {view === "results" && renderResults()}
+      {view === "dashboard" && renderDashboard()}
     </>
   );
 }

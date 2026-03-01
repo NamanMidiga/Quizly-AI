@@ -37,11 +37,24 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Groq generation failed";
+      console.error("[Quizly AI] Generate error:", message);
+
+      // Detect rate limit errors and give a user-friendly message
+      const isRateLimit = message.includes("rate_limit") || message.includes("Rate limit") || message.includes("429");
+      const retryMatch = message.match(/try again in (\d+m[\d.]+s|\d+s)/i);
+      const retryHint = retryMatch ? ` Try again in ${retryMatch[1]}.` : " Try again in a few minutes.";
+
       return NextResponse.json(
         {
-          error: "AI generation failed",
-          message,
-          hint: "Ensure GROQ_API_KEY is set in .env.local",
+          error: isRateLimit
+            ? `Rate limit reached — daily token quota exhausted.${retryHint}`
+            : "AI generation failed",
+          message: isRateLimit
+            ? "Your Groq free tier (100K tokens/day) has been used up. Wait for the limit to reset or upgrade at console.groq.com."
+            : message,
+          hint: isRateLimit
+            ? "Wait for rate limit to reset or use a new API key"
+            : "Ensure GROQ_API_KEY is set in .env.local",
         },
         { status: 502 }
       );

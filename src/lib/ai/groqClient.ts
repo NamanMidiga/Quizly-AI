@@ -99,11 +99,13 @@ export async function generateWithGroq<T>(
       // If validation fails and we have retries left, try again
       if (attempt < retries) {
         console.warn(
-          `[Quizly AI] Schema validation failed (attempt ${attempt + 1}), retrying...`
+          `[Quizly AI] Schema validation failed (attempt ${attempt + 1}), retrying...`,
+          result.error.issues.slice(0, 3)
         );
         continue;
       }
 
+      console.error("[Quizly AI] Schema validation failed permanently:", result.error.issues);
       throw new Error(
         `Groq response failed schema validation: ${result.error.message}`
       );
@@ -112,7 +114,8 @@ export async function generateWithGroq<T>(
 
       if (attempt < retries && !(err instanceof z.ZodError)) {
         console.warn(
-          `[Quizly AI] Groq call failed (attempt ${attempt + 1}), retrying...`
+          `[Quizly AI] Groq call failed (attempt ${attempt + 1}), retrying...`,
+          err instanceof Error ? err.message : err
         );
         continue;
       }

@@ -53,6 +53,10 @@ export const GenerateRequestSchema = z.object({
   examPattern: z.string().optional(),         // e.g. "JEE", "NEET", "UPSC"
   negativeMark: z.number().min(0).default(0),
   timeMinutes: z.number().min(1).default(30),
+  mcqCount: z.number().min(0).optional(),           // exact number of MCQ questions requested
+  subjectiveCount: z.number().min(0).optional(),     // exact number of subjective questions requested
+  mcqDifficulty: z.enum(["easy", "medium", "hard"]).optional(),         // specific difficulty for MCQ questions
+  subjectiveDifficulty: z.enum(["easy", "medium", "hard"]).optional(),  // specific difficulty for subjective questions
 });
 
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;

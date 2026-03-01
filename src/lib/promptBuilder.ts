@@ -64,27 +64,59 @@ export function buildGeneratePrompt(req: GenerateRequest): string {
       `\n- Subjective questions should have marks proportional to their expected answer length.`
     );
   } else {
-    lines.push(
-      `\nQUESTION TYPE RULES:` +
-      `\n- Generate a MIX of MCQ and subjective questions.` +
-      `\n- Default split: roughly 50% MCQ, 50% subjective.` +
-      `\n- Subjective questions MUST vary: include short-answer (2-3 marks), explain-type (5 marks), ` +
-      `compare-contrast, analytical, and long-answer questions (8-10 marks).` +
-      `\n- If the user mentions specific marks per question, use those marks.` +
-      `\n- MCQ questions should typically be 1-2 marks each.` +
-      `\n- Subjective questions should have marks proportional to their expected answer length.`
-    );
+    // Check if exact counts were provided
+    const mcqCount = req.mcqCount;
+    const subjCount = req.subjectiveCount;
+    if (mcqCount != null && subjCount != null && (mcqCount + subjCount) > 0) {
+      const mcqDiff = req.mcqDifficulty;
+      const subjDiff = req.subjectiveDifficulty;
+      let difficultyRule = "";
+      if (mcqDiff && subjDiff) {
+        difficultyRule =
+          `\n- ALL ${mcqCount} MCQ questions MUST be difficulty "${mcqDiff}".` +
+          `\n- ALL ${subjCount} subjective questions MUST be difficulty "${subjDiff}".` +
+          `\n- Do NOT mix difficulties unless specified. Follow these EXACTLY.`;
+      } else if (mcqDiff) {
+        difficultyRule = `\n- ALL ${mcqCount} MCQ questions MUST be difficulty "${mcqDiff}".`;
+      } else if (subjDiff) {
+        difficultyRule = `\n- ALL ${subjCount} subjective questions MUST be difficulty "${subjDiff}".`;
+      }
+      lines.push(
+        `\nQUESTION TYPE RULES (STRICT — follow these counts and difficulties EXACTLY):` +
+        `\n- Generate EXACTLY ${mcqCount} MCQ question${mcqCount !== 1 ? "s" : ""} and EXACTLY ${subjCount} subjective question${subjCount !== 1 ? "s" : ""}.` +
+        `\n- Total questions MUST be ${mcqCount + subjCount}. No more, no less.` +
+        difficultyRule +
+        `\n- MCQ questions must have 4 options each and typically be 1-2 marks each.` +
+        `\n- Subjective questions MUST vary: include short-answer (2-3 marks), explain-type (5 marks), ` +
+        `compare-contrast, analytical, and long-answer questions (8-10 marks).` +
+        `\n- Subjective questions should have marks proportional to their expected answer length.`
+      );
+    } else {
+      lines.push(
+        `\nQUESTION TYPE RULES:` +
+        `\n- Generate a MIX of MCQ and subjective questions.` +
+        `\n- Default split: roughly 50% MCQ, 50% subjective.` +
+        `\n- Subjective questions MUST vary: include short-answer (2-3 marks), explain-type (5 marks), ` +
+        `compare-contrast, analytical, and long-answer questions (8-10 marks).` +
+        `\n- If the user mentions specific marks per question, use those marks.` +
+        `\n- MCQ questions should typically be 1-2 marks each.` +
+        `\n- Subjective questions should have marks proportional to their expected answer length.`
+      );
+    }
   }
 
-  // Difficulty tiering
-  if (req.difficulty === "mixed") {
-    lines.push(
-      "\nDifficulty distribution: generate a balanced mix of easy, medium, and hard questions. " +
-        "Tag EACH question with its difficulty level. The distribution should be roughly: " +
-        "30% easy, 40% medium, 30% hard."
-    );
-  } else {
-    lines.push(`\nDifficulty: ALL questions must be ${req.difficulty}`);
+  // Difficulty tiering — skip if per-type difficulties are already set
+  const hasPerTypeDifficulty = req.mcqDifficulty || req.subjectiveDifficulty;
+  if (!hasPerTypeDifficulty) {
+    if (req.difficulty === "mixed") {
+      lines.push(
+        "\nDifficulty distribution: generate a balanced mix of easy, medium, and hard questions. " +
+          "Tag EACH question with its difficulty level. The distribution should be roughly: " +
+          "30% easy, 40% medium, 30% hard."
+      );
+    } else {
+      lines.push(`\nDifficulty: ALL questions must be ${req.difficulty}`);
+    }
   }
 
   // Exam pattern

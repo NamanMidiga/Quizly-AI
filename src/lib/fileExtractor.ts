@@ -6,6 +6,7 @@
 import mammoth from "mammoth";
 import { extractText } from "unpdf";
 import Groq from "groq-sdk";
+import JSZip from "jszip";
 
 const VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 
@@ -82,6 +83,45 @@ export async function extractFromImage(buffer: Buffer, mimeType: string): Promis
 }
 
 /**
+ * Extract text from a PPTX buffer by parsing the XML slides inside the ZIP archive.
+ */
+export async function extractFromPPTX(buffer: Buffer): Promise<string> {
+  const zip = await JSZip.loadAsync(buffer);
+  const slideTexts: string[] = [];
+
+  // PPTX slides are stored as ppt/slides/slide1.xml, slide2.xml, etc.
+  const slideFiles = Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/slide(\d+)/)?.[1] || "0");
+      const numB = parseInt(b.match(/slide(\d+)/)?.[1] || "0");
+      return numA - numB;
+    });
+
+  for (const slidePath of slideFiles) {
+    const xml = await zip.files[slidePath].async("text");
+    // Extract all text content from <a:t> tags (PowerPoint text runs)
+    const texts = xml.match(/<a:t>([^<]*)<\/a:t>/g);
+    if (texts) {
+      const slideText = texts
+        .map((t) => t.replace(/<\/?a:t>/g, "").trim())
+        .filter(Boolean)
+        .join(" ");
+      if (slideText) {
+        const slideNum = slidePath.match(/slide(\d+)/)?.[1] || "?";
+        slideTexts.push(`[Slide ${slideNum}] ${slideText}`);
+      }
+    }
+  }
+
+  const fullText = slideTexts.join("\n\n");
+  if (!fullText.trim()) {
+    throw new Error("Could not extract text from PPTX — slides may be image-only");
+  }
+  return fullText;
+}
+
+/**
  * Get MIME type from file extension.
  */
 function getMimeType(ext: string): string {
@@ -110,6 +150,9 @@ export async function extractTextFromFile(
       return extractFromPDF(buffer);
     case "docx":
       return extractFromDOCX(buffer);
+    case "pptx":
+    case "ppt":
+      return extractFromPPTX(buffer);
     case "txt":
       return extractFromTXT(buffer);
     case "png":
@@ -121,7 +164,7 @@ export async function extractTextFromFile(
       return extractFromImage(buffer, getMimeType(ext!));
     default:
       throw new Error(
-        `Unsupported file type: .${ext}. Supported: PDF, DOCX, TXT, PNG, JPG, JPEG, WEBP`
+        `Unsupported file type: .${ext}. Supported: PDF, DOCX, PPTX, TXT, PNG, JPG, JPEG, WEBP`
       );
   }
 }

@@ -685,7 +685,7 @@ export default function Home() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.doc,.docx,.txt"
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.webp"
             style={{ display: "none" }}
             onChange={(e) => {
               const file = e.target.files?.[0];

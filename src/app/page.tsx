@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useSession, signOut } from "next-auth/react";
 
 /* ─── Web Speech API type shim ─── */
 declare global {
@@ -152,6 +153,9 @@ interface DashboardData {
 type View = "home" | "loading" | "quiz" | "grading" | "results" | "analytics" | "dashboard";
 
 export default function Home() {
+  /* ─── Auth ─── */
+  const { data: session } = useSession();
+
   /* ─── State ─── */
   const [view, setView] = useState<View>("home");
   const [inputValue, setInputValue] = useState("");
@@ -678,6 +682,8 @@ export default function Home() {
 
   /* ─── Render helpers ─── */
 
+  const [profileOpen, setProfileOpen] = useState(false);
+
   const renderHome = () => (
     <>
       {/* Nav buttons */}
@@ -687,6 +693,128 @@ export default function Home() {
       <button className="nav-btn btn-profile" aria-label="Dashboard" onClick={fetchDashboard}>
         <i className="fa-solid fa-chart-line" />
       </button>
+
+      {/* User profile button */}
+      {session?.user && (
+        <div style={{ position: "fixed", top: 25, right: 80, zIndex: 50 }}>
+          <button
+            onClick={() => setProfileOpen(!profileOpen)}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: "50%",
+              border: "2px solid rgba(100,140,255,0.25)",
+              background: "rgba(20,20,50,0.6)",
+              backdropFilter: "blur(20px)",
+              cursor: "pointer",
+              overflow: "hidden",
+              padding: 0,
+              transition: "all 0.3s ease",
+              boxShadow: profileOpen ? "0 0 20px rgba(100,140,255,0.3)" : "none",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "rgba(100,140,255,0.5)";
+              e.currentTarget.style.transform = "scale(1.05)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "rgba(100,140,255,0.25)";
+              e.currentTarget.style.transform = "scale(1)";
+            }}
+          >
+            {session.user.image ? (
+              <img
+                src={session.user.image}
+                alt={session.user.name || "User"}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <i className="fa-solid fa-user" style={{ color: "rgba(150,180,255,0.6)", fontSize: "0.85rem" }} />
+            )}
+          </button>
+
+          {/* Dropdown */}
+          {profileOpen && (
+            <>
+              <div
+                style={{ position: "fixed", inset: 0, zIndex: 49 }}
+                onClick={() => setProfileOpen(false)}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  top: 48,
+                  right: 0,
+                  background: "rgba(20,20,50,0.85)",
+                  backdropFilter: "blur(40px)",
+                  WebkitBackdropFilter: "blur(40px)",
+                  border: "1px solid rgba(100,140,255,0.15)",
+                  borderRadius: 18,
+                  padding: "18px 22px",
+                  minWidth: 220,
+                  zIndex: 51,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 15, paddingBottom: 15, borderBottom: "1px solid rgba(100,140,255,0.1)" }}>
+                  {session.user.image ? (
+                    <img
+                      src={session.user.image}
+                      alt=""
+                      style={{ width: 36, height: 36, borderRadius: "50%", border: "1px solid rgba(100,140,255,0.2)" }}
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(100,140,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <i className="fa-solid fa-user" style={{ color: "rgba(150,180,255,0.5)" }} />
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#e0e7ff", letterSpacing: "0.03em" }}>
+                      {session.user.name || "User"}
+                    </div>
+                    <div style={{ fontSize: "0.6rem", color: "rgba(150,180,255,0.4)", marginTop: 2 }}>
+                      {session.user.email}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  style={{
+                    width: "100%",
+                    padding: "10px 16px",
+                    background: "rgba(239,68,68,0.08)",
+                    border: "1px solid rgba(239,68,68,0.15)",
+                    borderRadius: 12,
+                    color: "#ef4444",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    fontFamily: "Montserrat, sans-serif",
+                    letterSpacing: "0.08em",
+                    cursor: "pointer",
+                    transition: "all 0.3s ease",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(239,68,68,0.15)";
+                    e.currentTarget.style.borderColor = "rgba(239,68,68,0.3)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(239,68,68,0.08)";
+                    e.currentTarget.style.borderColor = "rgba(239,68,68,0.15)";
+                  }}
+                >
+                  <i className="fa-solid fa-right-from-bracket" />
+                  SIGN OUT
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Glass Card */}
       <div className="glass-card">

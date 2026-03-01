@@ -25,13 +25,20 @@ const MODEL = "llama-3.3-70b-versatile";
 const TIMEOUT_MS = 60_000;
 
 function getClient(): Groq {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY || process.env.GROQ;
   if (!apiKey || apiKey === "your_groq_api_key_here") {
-    console.error("[Quizly AI] GROQ_API_KEY is missing or not set. Available env keys:", Object.keys(process.env).filter(k => k.includes("GROQ") || k.includes("NODE")));
+    const groqKeys = Object.keys(process.env).filter(k => k.toLowerCase().includes("groq"));
+    console.error("[Quizly AI] GROQ_API_KEY is missing or not set.");
+    console.error("[Quizly AI] Env vars containing 'groq':", groqKeys);
+    console.error("[Quizly AI] GROQ_API_KEY value is:", process.env.GROQ_API_KEY ? "SET (length " + process.env.GROQ_API_KEY.length + ")" : "UNDEFINED");
+    console.error("[Quizly AI] GROQ_KEY value is:", process.env.GROQ_KEY ? "SET" : "UNDEFINED");
+    console.error("[Quizly AI] GROQ value is:", process.env.GROQ ? "SET" : "UNDEFINED");
     throw new Error(
-      "GROQ_API_KEY is not configured. Set it as an environment variable."
+      "GROQ_API_KEY is not configured. Set it as an environment variable. " +
+      "Found env vars with 'groq': [" + groqKeys.join(", ") + "]"
     );
   }
+  console.log("[Quizly AI] API key loaded successfully (length:", apiKey.length + ")");
   return new Groq({ apiKey });
 }
 

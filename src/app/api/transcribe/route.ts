@@ -39,18 +39,55 @@ function extractVideoId(input: string): string | null {
 }
 
 /**
- * Fetches video metadata using YouTube's free oEmbed endpoint (no API key needed).
+ * Fetches video metadata using multiple oEmbed providers as fallbacks.
  */
 async function fetchVideoMeta(videoId: string): Promise<{ title: string; author: string } | null> {
-  try {
-    const url = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return { title: data.title || "", author: data.author_name || "" };
-  } catch {
-    return null;
+  const endpoints = [
+    `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`,
+    `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(6000),
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; QuizlyAI/1.0)" },
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const title = data.title || data.author_name || "";
+      if (title) {
+        return { title, author: data.author_name || "" };
+      }
+    } catch {
+      continue;
+    }
   }
+
+  // Last resort: scrape the page <title> tag
+  try {
+    const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+      if (titleMatch) {
+        const title = titleMatch[1].replace(" - YouTube", "").trim();
+        if (title && title !== "YouTube") {
+          return { title, author: "" };
+        }
+      }
+    }
+  } catch {
+    // all methods failed
+  }
+
+  return null;
 }
 
 /**
@@ -172,10 +209,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json(
-      { error: "Could not fetch video info. Please check the URL." },
-      { status: 404 }
-    );
+    // Even if all metadata fetches failed, return the videoId so the frontend can still generate
+    return NextResponse.json({
+      transcript: null,
+      title: null,
+      author: null,
+      source: "id-only",
+      videoId,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

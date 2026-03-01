@@ -320,6 +320,11 @@ export default function Home() {
     return /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)/i.test(text);
   };
 
+  const extractYouTubeVideoId = (text: string): string | null => {
+    const m = text.match(/(?:v=|\/v\/|\/embed\/|youtu\.be\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+  };
+
   const generateQuiz = async () => {
     const prompt = inputValue.trim();
     if (!prompt && !uploadedContent) {
@@ -402,6 +407,9 @@ export default function Home() {
     let promptToSend: string | undefined = prompt || undefined;
 
     if (prompt && isYouTubeUrl(prompt)) {
+      let gotTranscript = false;
+
+      // Try to fetch transcript/metadata — but NEVER let this block quiz generation
       try {
         const transcribeRes = await fetch("/api/transcribe", {
           method: "POST",
@@ -409,30 +417,26 @@ export default function Home() {
           body: JSON.stringify({ url: prompt }),
         });
 
-        const transcribeData = await transcribeRes.json();
+        if (transcribeRes.ok) {
+          const transcribeData = await transcribeRes.json();
 
-        if (!transcribeRes.ok) {
-          setError(transcribeData.error || "Could not process YouTube link.");
-          setView("home");
-          return;
-        }
-
-        if (transcribeData.transcript) {
-          // Captions available — use full transcript
-          contentToSend = transcribeData.transcript;
-          promptToSend = `Generate a quiz based on this YouTube video transcript from "${transcribeData.title || "a video"}". Focus on the key concepts, facts, and topics discussed.`;
-        } else if (transcribeData.title) {
-          // No captions — use video title/author so Groq generates from its knowledge
-          promptToSend = `Generate a quiz about the topic of this YouTube video: "${transcribeData.title}" by ${transcribeData.author || "unknown creator"}. Use your knowledge to create questions about the subject matter this video covers. Make the questions educational and relevant to the video's topic.`;
-        } else {
-          setError("Could not fetch any info from this YouTube link. Try another video.");
-          setView("home");
-          return;
+          if (transcribeData.transcript) {
+            contentToSend = transcribeData.transcript;
+            promptToSend = `Generate a quiz based on this YouTube video transcript from "${transcribeData.title || "a video"}". Focus on the key concepts, facts, and topics discussed.`;
+            gotTranscript = true;
+          } else if (transcribeData.title) {
+            promptToSend = `Generate a quiz about the topic of this YouTube video: "${transcribeData.title}" by ${transcribeData.author || "unknown creator"}. Use your knowledge to create questions about the subject matter this video covers. Make the questions educational and relevant to the video's topic.`;
+            gotTranscript = true;
+          }
         }
       } catch {
-        setError("Failed to process YouTube link. Please check the URL and try again.");
-        setView("home");
-        return;
+        // Transcribe API failed — that's fine, we'll fall back below
+      }
+
+      // Fallback: if transcribe failed or returned nothing, use the URL directly
+      if (!gotTranscript) {
+        const videoId = extractYouTubeVideoId(prompt);
+        promptToSend = `Generate a quiz about the topic of this YouTube video: ${prompt}${videoId ? ` (video ID: ${videoId})` : ""}. Use your extensive knowledge to create educational, relevant questions about the subject this video likely covers. Infer the topic from the URL and video ID.`;
       }
     }
 

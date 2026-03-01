@@ -176,7 +176,7 @@ export function buildGeneratePrompt(req: GenerateRequest): string {
       "type": "mcq" | "subjective",
       "question": "string",
       "options": ["A", "B", "C", "D"] (for MCQ only),
-      "correctAnswer": "string — the correct option text or subjective answer",
+      "correctAnswer": "string — for MCQ: MUST be the EXACT full text of the correct option (not just the letter A/B/C/D, but the actual option text). For subjective: a model answer",
       "difficulty": "easy" | "medium" | "hard",
       "marks": number,
       "negativeMark": number (0 if no negative marking),
@@ -198,6 +198,8 @@ export function buildGeneratePrompt(req: GenerateRequest): string {
     "\nIMPORTANT: Every question MUST have the 'difficulty' field. " +
       "Every question MUST have 'explanation'. " +
       "Every question MUST have 'topic'. " +
+      "For MCQ questions: 'correctAnswer' MUST be the EXACT full text of one of the options — NOT just a letter like 'A' or 'B'. " +
+      "For example, if options are ['Oxygen', 'Nitrogen', 'Hydrogen', 'Carbon'] and Oxygen is correct, set correctAnswer to 'Oxygen', NOT 'A'. " +
       "For SUBJECTIVE questions: MUST include 'expectedLength', 'keywords' (array of 3-6 key terms), and 'sampleAnswer' (detailed model answer). " +
       "Subjective questions should test understanding, analysis, and application — not just recall. " +
       "Vary subjective questions between short-answer, explain-type, compare-contrast, and analytical questions. " +

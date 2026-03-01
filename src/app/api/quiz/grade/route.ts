@@ -63,10 +63,40 @@ export async function POST(request: NextRequest) {
       }
 
       if (question.type === "mcq") {
-        // MCQ — local comparison only
+        // MCQ — robust comparison that handles various formats Groq might return
+        const studentAnswer = submission.answer.trim().toLowerCase();
+        const correctRaw = question.correctAnswer.trim().toLowerCase();
+        const options = question.options || [];
+
+        // Find which option index the student selected
+        const studentOptionIndex = options.findIndex(
+          (opt) => opt.trim().toLowerCase() === studentAnswer
+        );
+        // Find which option index matches the correct answer
+        // Check multiple formats: exact match, letter match ("a","b","c","d"), letter-dot match ("a.","b."), or substring
+        const correctOptionIndex = options.findIndex((opt, i) => {
+          const optLower = opt.trim().toLowerCase();
+          const letter = String.fromCharCode(97 + i); // 'a','b','c','d'
+          return (
+            optLower === correctRaw ||
+            correctRaw === letter ||
+            correctRaw === letter + "." ||
+            correctRaw === `${letter}) ${optLower}` ||
+            correctRaw === `${letter}. ${optLower}` ||
+            correctRaw.startsWith(`${letter}.`) && correctRaw.includes(optLower) ||
+            correctRaw.startsWith(`${letter})`) && correctRaw.includes(optLower) ||
+            optLower.includes(correctRaw) ||
+            correctRaw.includes(optLower)
+          );
+        });
+
+        // Check correctness: either exact text match, or both point to the same option index
         const isCorrect =
-          submission.answer.trim().toLowerCase() ===
-          question.correctAnswer.trim().toLowerCase();
+          studentAnswer === correctRaw ||
+          (studentOptionIndex >= 0 && studentOptionIndex === correctOptionIndex) ||
+          studentAnswer.includes(correctRaw) ||
+          correctRaw.includes(studentAnswer);
+
         const rawMarks = isCorrect
           ? Math.min(question.marks, effectiveMaxMarks)
           : -(question.negativeMark || 0);

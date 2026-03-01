@@ -5,7 +5,9 @@ import { promises as fs } from "fs";
 import path from "path";
 import { StoredQuiz, QuizAttempt, Quiz, GradeResult } from "./schemas";
 
-const DB_PATH = path.join(process.cwd(), "memory_db.json");
+const DB_PATH = process.env.NODE_ENV === "production"
+  ? path.join("/tmp", "memory_db.json")
+  : path.join(process.cwd(), "memory_db.json");
 
 interface DB {
   quizzes: StoredQuiz[];

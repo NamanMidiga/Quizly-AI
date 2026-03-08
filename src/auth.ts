@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { logLogin } from "@/lib/memoryDB";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   debug: process.env.NODE_ENV === "development",
@@ -15,6 +16,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     error: "/login",
   },
   callbacks: {
+    async signIn({ user, account }) {
+      try {
+        await logLogin({
+          email: user.email || "unknown",
+          name: user.name || "unknown",
+          image: user.image || undefined,
+          provider: account?.provider || "unknown",
+        });
+      } catch (err) {
+        console.error("[Quizly AI] Failed to log login:", err);
+      }
+      return true;
+    },
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const isOnLogin = nextUrl.pathname.startsWith("/login");

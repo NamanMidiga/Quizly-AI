@@ -9,16 +9,27 @@ const DB_PATH = process.env.NODE_ENV === "production"
   ? path.join("/tmp", "memory_db.json")
   : path.join(process.cwd(), "memory_db.json");
 
+interface LoginLog {
+  email: string;
+  name: string;
+  image?: string;
+  timestamp: string;
+  provider: string;
+}
+
 interface DB {
   quizzes: StoredQuiz[];
+  loginLogs?: LoginLog[];
 }
 
 async function readDB(): Promise<DB> {
   try {
     const raw = await fs.readFile(DB_PATH, "utf-8");
-    return JSON.parse(raw) as DB;
+    const data = JSON.parse(raw) as DB;
+    if (!data.loginLogs) data.loginLogs = [];
+    return data;
   } catch {
-    return { quizzes: [] };
+    return { quizzes: [], loginLogs: [] };
   }
 }
 
@@ -72,4 +83,28 @@ export async function deleteQuiz(id: string): Promise<boolean> {
   db.quizzes.splice(idx, 1);
   await writeDB(db);
   return true;
+}
+
+/* ─── Login Logs ─── */
+
+export async function logLogin(entry: {
+  email: string;
+  name: string;
+  image?: string;
+  provider: string;
+}): Promise<void> {
+  const db = await readDB();
+  if (!db.loginLogs) db.loginLogs = [];
+  db.loginLogs.push({
+    ...entry,
+    timestamp: new Date().toISOString(),
+  });
+  await writeDB(db);
+}
+
+export async function getLoginLogs(): Promise<LoginLog[]> {
+  const db = await readDB();
+  return (db.loginLogs || []).sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
 }

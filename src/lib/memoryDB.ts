@@ -102,7 +102,59 @@ export async function getLoginLogs(): Promise<LoginLog[]> {
     .from("login_logs")
     .select("*")
     .order("timestamp", { ascending: false })
-    .limit(100);
+    .limit(500);
   if (error || !data) return [];
   return data as LoginLog[];
+}
+
+/* ─── User Stats ─── */
+
+export async function getUserStats() {
+  const { data: logs, error } = await getSupabase()
+    .from("login_logs")
+    .select("*")
+    .order("timestamp", { ascending: false });
+
+  if (error || !logs) return { totalLogins: 0, uniqueUsers: 0, users: [], recentLogins: [] };
+
+  // Unique users by email
+  const userMap = new Map<string, { email: string; name: string; image: string | null; loginCount: number; firstLogin: string; lastLogin: string }>();
+  for (const log of logs) {
+    const existing = userMap.get(log.email);
+    if (existing) {
+      existing.loginCount++;
+      if (log.timestamp < existing.firstLogin) existing.firstLogin = log.timestamp;
+      if (log.timestamp > existing.lastLogin) existing.lastLogin = log.timestamp;
+    } else {
+      userMap.set(log.email, {
+        email: log.email,
+        name: log.name,
+        image: log.image || null,
+        loginCount: 1,
+        firstLogin: log.timestamp,
+        lastLogin: log.timestamp,
+      });
+    }
+  }
+
+  const users = Array.from(userMap.values()).sort((a, b) => b.loginCount - a.loginCount);
+
+  // Active in last 24h / 7d / 30d
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const uniqueIn = (ms: number) => {
+    const cutoff = new Date(now - ms).toISOString();
+    const emails = new Set(logs.filter(l => l.timestamp >= cutoff).map(l => l.email));
+    return emails.size;
+  };
+
+  return {
+    totalLogins: logs.length,
+    uniqueUsers: users.length,
+    activeToday: uniqueIn(day),
+    activeLast7Days: uniqueIn(7 * day),
+    activeLast30Days: uniqueIn(30 * day),
+    users,
+    recentLogins: logs.slice(0, 20),
+  };
 }

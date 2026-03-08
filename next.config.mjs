@@ -3,6 +3,8 @@ const nextConfig = {
   // Explicitly map server-side env vars so they are always available in API routes
   env: {
     GROQ_API_KEY: process.env.GROQ_API_KEY,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
   },
   images: {
     remotePatterns: [

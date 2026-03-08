@@ -1,6 +1,5 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { logLogin } from "@/lib/memoryDB";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   debug: process.env.NODE_ENV === "development",
@@ -17,12 +16,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async signIn({ user, account }) {
+      // Log login via API route (avoids Edge Runtime issues with MongoDB)
       try {
-        await logLogin({
-          email: user.email || "unknown",
-          name: user.name || "unknown",
-          image: user.image || undefined,
-          provider: account?.provider || "unknown",
+        const baseUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
+        await fetch(`${baseUrl}/api/auth/logs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: user.email || "unknown",
+            name: user.name || "unknown",
+            image: user.image || undefined,
+            provider: account?.provider || "unknown",
+          }),
         });
       } catch (err) {
         console.error("[Quizly AI] Failed to log login:", err);

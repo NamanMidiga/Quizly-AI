@@ -23,7 +23,7 @@ export async function saveQuiz(id: string, quiz: Quiz): Promise<StoredQuiz> {
 export async function getQuiz(id: string): Promise<StoredQuiz | undefined> {
   const { data, error } = await getSupabase()
     .from("quizzes")
-    .select("data")
+    .select("*")
     .eq("id", id)
     .single();
   if (error || !data) return undefined;
@@ -33,7 +33,7 @@ export async function getQuiz(id: string): Promise<StoredQuiz | undefined> {
 export async function getAllQuizzes(): Promise<StoredQuiz[]> {
   const { data, error } = await getSupabase()
     .from("quizzes")
-    .select("data")
+    .select("*")
     .order("created_at", { ascending: false });
   if (error || !data) return [];
   return data.map((row) => row.data as StoredQuiz);
@@ -45,7 +45,7 @@ export async function saveAttempt(
 ): Promise<void> {
   const { data, error: fetchError } = await getSupabase()
     .from("quizzes")
-    .select("data")
+    .select("*")
     .eq("id", quizId)
     .single();
   if (fetchError || !data) throw new Error(`Quiz ${quizId} not found`);

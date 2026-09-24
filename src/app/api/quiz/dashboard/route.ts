@@ -1,18 +1,5 @@
-// GROQ INTELLIGENCE RULE:
-// Dashboard analytics must use Groq for study recommendations.
-
 import { NextResponse } from "next/server";
 import { getAllQuizzes } from "@/lib/memoryDB";
-import { generateWithGroq } from "@/lib/ai/groqClient";
-import { z } from "zod";
-
-const DashboardRecommendationSchema = z.object({
-  studyPlan: z.string(),
-  priorityTopics: z.array(z.string()),
-  dailyGoal: z.string(),
-  motivationalNote: z.string(),
-  predictedImprovement: z.string(),
-});
 
 export async function GET() {
   try {
@@ -131,52 +118,6 @@ export async function GET() {
       else improvementTrend = "stable";
     }
 
-    // AI-powered study recommendations (only if we have data)
-    let aiRecommendations = null;
-    if (totalQuizzesTaken > 0) {
-      try {
-        const topicSummary = topicMastery
-          .map((t) => `${t.topic}: ${t.accuracy}% (${t.correct}/${t.total})`)
-          .join("\n");
-
-        const recentScores = trendData.slice(-5).map((t) => `${t.percentage}%`).join(", ");
-
-        const prompt = `You are an AI study coach. Analyze this student's quiz performance and give personalized recommendations.
-
-STUDENT DATA:
-- Total quizzes taken: ${totalQuizzesTaken}
-- Overall accuracy: ${overallAccuracy}%
-- Improvement trend: ${improvementTrend}
-- Recent scores: ${recentScores || "N/A"}
-
-TOPIC PERFORMANCE:
-${topicSummary || "No topic data yet"}
-
-WEAK AREAS: ${weakTopics.map((t) => t.topic).join(", ") || "None identified"}
-STRONG AREAS: ${strongTopics.map((t) => t.topic).join(", ") || "None identified"}
-
-INSTRUCTIONS:
-- Create a concise study plan (2-3 sentences).
-- List top 3 priority topics to focus on.
-- Suggest a daily study goal.
-- Write a short motivational note (1 sentence).
-- Predict improvement if student follows the plan (1 sentence).
-
-Return ONLY valid JSON:
-{
-  "studyPlan": "string",
-  "priorityTopics": ["string", "string", "string"],
-  "dailyGoal": "string",
-  "motivationalNote": "string",
-  "predictedImprovement": "string"
-}`;
-
-        aiRecommendations = await generateWithGroq(prompt, DashboardRecommendationSchema);
-      } catch {
-        // AI recommendations are optional
-      }
-    }
-
     return NextResponse.json({
       overview: {
         totalQuizzes: totalQuizzesTaken,
@@ -191,7 +132,7 @@ Return ONLY valid JSON:
       mediumTopics,
       trendData,
       recentAttempts: allAttempts.slice(-10).reverse(),
-      aiRecommendations,
+      aiRecommendations: null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

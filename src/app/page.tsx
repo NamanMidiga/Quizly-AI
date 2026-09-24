@@ -909,7 +909,6 @@ export default function Home() {
     <div className="glass-card" style={{ justifyContent: "center", alignItems: "center", gap: 20 }}>
       <div className="loading-spinner" style={{ width: 40, height: 40 }} />
       <p style={{ color: "rgba(150,180,255,0.5)", fontSize: "0.9rem", letterSpacing: 2 }}>GENERATING QUIZ...</p>
-      <p style={{ color: "rgba(100,130,255,0.35)", fontSize: "0.7rem" }}>Powered by Groq LLaMA 3.3 70B</p>
     </div>
   );
 

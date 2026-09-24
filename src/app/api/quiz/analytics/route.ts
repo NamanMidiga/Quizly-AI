@@ -1,10 +1,6 @@
-// GROQ INTELLIGENCE RULE:
-// Analytics must use Groq — no hardcoded recommendation logic.
-
 import { NextRequest, NextResponse } from "next/server";
 import { AnalyticsRequestSchema } from "@/lib/schemas";
 import { getQuiz } from "@/lib/memoryDB";
-import { generateAnalytics } from "@/lib/analyticsService";
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,8 +31,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const analytics = await generateAnalytics(storedQuiz);
-    return NextResponse.json(analytics, { status: 200 });
+    return NextResponse.json(
+      { error: "AI analytics are temporarily unavailable while the AI provider is being replaced." },
+      { status: 503 }
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(

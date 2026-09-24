@@ -6,10 +6,6 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
-      - key: GROQ_API_KEY
-        sync: false
-      - key: GROQ_KEY
-        sync: false
       - key: NODE_ENV
         value: production
       - key: AUTH_SECRET

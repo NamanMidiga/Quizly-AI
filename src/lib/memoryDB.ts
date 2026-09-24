@@ -1,5 +1,4 @@
-// memory_db.json — stores generated quizzes, attempts, scores, analytics.
-// It does NOT generate anything. All intelligence comes from Groq.
+// memory_db.json stores generated quizzes, attempts, scores, and analytics.
 // Uses file-based JSON storage instead of Supabase (which is banned in India).
 
 import { promises as fs } from "fs";

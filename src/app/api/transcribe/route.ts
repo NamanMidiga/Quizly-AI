@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     const meta = await fetchVideoMeta(videoId);
 
     if (captions) {
-      // Truncate very long transcripts to ~12000 chars to stay within Groq token limits
+      // Truncate very long transcripts before returning them to the client.
       const trimmed = captions.length > 12000 ? captions.slice(0, 12000) + "..." : captions;
       return NextResponse.json({
         transcript: trimmed,
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // No captions available — return metadata so Groq can generate based on the topic
+    // No captions available — return metadata so a future AI provider can use the topic.
     if (meta && meta.title) {
       return NextResponse.json({
         transcript: null,

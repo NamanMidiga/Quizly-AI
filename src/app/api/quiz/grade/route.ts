@@ -1,11 +1,4 @@
-// GROQ INTELLIGENCE RULE:
-// Subjective answers must be sent to Groq for evaluation.
-// No local grading allowed for subjective questions.
-// MCQs graded locally (comparison logic only).
-
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { generateWithGroq } from "@/lib/ai/groqClient";
 import {
   GradeRequestSchema,
   GradedAnswer,
@@ -15,7 +8,6 @@ import {
   QuizAttempt,
 } from "@/lib/schemas";
 import { getQuiz, saveAttempt } from "@/lib/memoryDB";
-import { buildGradePrompt } from "@/lib/promptBuilder";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: NextRequest) {
@@ -63,7 +55,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (question.type === "mcq") {
-        // MCQ — robust comparison that handles various formats Groq might return
+        // MCQ comparison handles both answer text and option-letter formats.
         const studentAnswer = submission.answer.trim().toLowerCase();
         const correctRaw = question.correctAnswer.trim().toLowerCase();
         const options = question.options || [];
@@ -111,51 +103,10 @@ export async function POST(request: NextRequest) {
             : `Incorrect. The correct answer is: ${question.correctAnswer}${hintNote}`,
         });
       } else {
-        // TASK 5 — Subjective grading MUST call Groq
-        try {
-          const prompt = buildGradePrompt(
-            question.question,
-            question.correctAnswer,
-            submission.answer,
-            question.marks,
-            question.keywords,
-            question.sampleAnswer,
-            question.expectedLength
-          );
-
-          const SingleGradeSchema = z.object({
-            questionId: z.number(),
-            isCorrect: z.boolean(),
-            marksAwarded: z.number(),
-            feedback: z.string(),
-            rubric: z.string().optional(),
-            keywordsFound: z.array(z.string()).optional(),
-            keywordsMissed: z.array(z.string()).optional(),
-            qualityScore: z.number().min(0).max(100).optional(),
-            strengths: z.string().optional(),
-            improvements: z.string().optional(),
-          });
-
-          const graded = await generateWithGroq(prompt, SingleGradeSchema);
-          graded.questionId = question.id;
-          // Cap marks based on hints used
-          if (hintsUsed > 0) {
-            graded.marksAwarded = Math.min(graded.marksAwarded, effectiveMaxMarks);
-            graded.feedback += ` (${hintsUsed} hint(s) used — max marks capped to ${effectiveMaxMarks})`;
-          }
-          totalScore += graded.marksAwarded;
-          results.push(graded);
-        } catch (err) {
-          // Fail safely — do not grade locally
-          return NextResponse.json(
-            {
-              error: "Subjective grading failed — Groq unavailable",
-              message:
-                err instanceof Error ? err.message : "AI grading failed",
-            },
-            { status: 502 }
-          );
-        }
+        return NextResponse.json(
+          { error: "Subjective grading is temporarily unavailable while the AI provider is being replaced." },
+          { status: 503 }
+        );
       }
     }
 

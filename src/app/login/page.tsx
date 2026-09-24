@@ -168,7 +168,6 @@ function LoginContent() {
               textAlign: "center",
             }}
           >
-            Powered by Groq LLaMA 3.3 70B
           </p>
         </div>
       </div>

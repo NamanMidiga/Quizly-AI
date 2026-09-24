@@ -1,6 +1,3 @@
-// GROQ INTELLIGENCE RULE:
-// All dynamic quiz content must originate from Groq LLaMA 3.3 70B.
-
 import { z } from "zod";
 
 /* ─── Single Question ─── */

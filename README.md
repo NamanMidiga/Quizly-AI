@@ -1,26 +1,25 @@
 # 🧠 Quizly AI — Byte Busters
 
-A full-stack Next.js web application that generates, administers, and grades quizzes using **Groq LLaMA 3.3 70B**. Zero local intelligence — every question, answer, rubric, and recommendation originates from Groq.
+A full-stack Next.js web application that generates, administers, and grades quizzes with an external AI provider. The provider integration is currently being replaced.
 
 ## Architecture
 
 ```
-User Input → Next.js API Route → Groq LLaMA 3.3 70B → Validated JSON → Store → Return
+User Input → Next.js API Route → AI Provider → Validated JSON → Store → Return
 ```
 
 ## Features
 
 - **Smart Quiz Generation** — Type natural prompts like "3 easy mcq and 2 hard subjective on physics"
-- **Multi-Source Input** — Topic text, file upload (PDF/DOCX/TXT/images), or YouTube links
+- **Multi-Source Input** — Topic text, file upload (PDF/DOCX/PPTX/TXT), or YouTube links
 - **Per-Type Difficulty Control** — Specify exact counts & difficulty per question type
 - **Two Modes** — Normal (casual MCQs) and Test (full exam simulation with timer & negative marking)
-- **AI Grading** — MCQs compared locally, subjective answers graded by Groq with rubrics & keyword analysis
-- **Progressive Hints** — AI-generated hints that get stronger (each costs -1 mark)
-- **AI Explanations** — Deep explanations with concept breakdowns, memory tips, and related topics
-- **Dashboard Analytics** — AI-powered study recommendations, weak/strong topic tracking, trend analysis
+- **Grading** — MCQs compared locally; subjective grading is awaiting the replacement provider
+- **Progressive Hints** — Awaiting the replacement AI provider
+- **Explanations** — Awaiting the replacement AI provider
+- **Dashboard Analytics** — Local performance tracking with provider recommendations temporarily disabled
 - **Speech Input** — Web Speech API for voice-based quiz generation
-- **Image OCR** — Groq Vision (LLaMA 4 Scout) extracts text from uploaded images
-- **Multilingual** — Groq detects and generates in the input language
+- **Document Input** — PDF, DOCX, PPTX, and TXT text extraction
 
 ## Setup
 
@@ -29,11 +28,7 @@ User Input → Next.js API Route → Groq LLaMA 3.3 70B → Validated JSON → S
    npm install
    ```
 
-2. Create `.env.local` with your Groq API key:
-   ```
-   GROQ_API_KEY=gsk_your_key_here
-   ```
-   Get a free key at [console.groq.com](https://console.groq.com)
+2. Create `.env.local` with the authentication and storage variables listed in `.env.example`.
 
 3. Run the dev server:
    ```bash
@@ -48,8 +43,7 @@ User Input → Next.js API Route → Groq LLaMA 3.3 70B → Validated JSON → S
 |-------|-----------|
 | Framework | Next.js 16 (App Router, Turbopack) |
 | Language | TypeScript 5.9 |
-| AI | Groq SDK + LLaMA 3.3 70B Versatile |
-| Vision | Groq + LLaMA 4 Scout 17B (image OCR) |
+| AI | Replacement provider pending |
 | Validation | Zod v4 |
 | Styling | Tailwind CSS v4 + Custom Glassmorphism |
 | Storage | File-based JSON (memory_db.json) |
@@ -64,28 +58,27 @@ src/
 │   ├── globals.css             # Full glassmorphism theme
 │   └── api/
 │       ├── quiz/
-│       │   ├── generate/route.ts   # Quiz generation (Groq)
-│       │   ├── grade/route.ts      # Grading (MCQ local + subjective Groq)
-│       │   ├── explain/route.ts    # AI explanations (Groq)
-│       │   ├── hint/route.ts       # Progressive hints (Groq)
-│       │   ├── analytics/route.ts  # Topic analytics (Groq)
-│       │   ├── dashboard/route.ts  # Dashboard aggregation + AI recommendations
+│       │   ├── generate/route.ts   # Quiz generation (provider pending)
+│       │   ├── grade/route.ts      # Grading (MCQ local + provider pending)
+│       │   ├── explain/route.ts    # AI explanations (provider pending)
+│       │   ├── hint/route.ts       # Progressive hints (provider pending)
+│       │   ├── analytics/route.ts  # Topic analytics (provider pending)
+│       │   ├── dashboard/route.ts  # Dashboard aggregation
 │       │   ├── list/route.ts       # List all quizzes
 │       │   └── [id]/route.ts       # Get single quiz
 │       ├── upload/route.ts         # File upload & text extraction
 │       └── transcribe/route.ts     # YouTube URL → captions/metadata
 ├── lib/
-│   ├── ai/groqClient.ts       # Single Groq entry point (typed, validated, retried)
 │   ├── schemas.ts              # All Zod schemas
 │   ├── promptBuilder.ts        # Prompt construction for all AI features
-│   ├── analyticsService.ts     # Analytics via Groq
-│   ├── fileExtractor.ts        # PDF/DOCX/TXT/Image extraction
+│   ├── analyticsService.ts     # Analytics helpers
+│   ├── fileExtractor.ts        # PDF/DOCX/PPTX/TXT extraction
 │   └── memoryDB.ts             # JSON file storage
 ```
 
-## Intelligence Rule
+## Provider Status
 
-> All dynamic quiz content must originate from Groq LLaMA 3.3 70B. No local question generators. No static fallback content. Fail safely if Groq fails.
+> The previous AI provider integration has been removed. Provider-dependent endpoints return `503` until the replacement integration is added.
 
 ## Team
 

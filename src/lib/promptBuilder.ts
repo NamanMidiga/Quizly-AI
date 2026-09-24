@@ -1,13 +1,7 @@
-// GROQ INTELLIGENCE RULE:
-// All dynamic quiz content must originate from Groq LLaMA 3.3 70B.
-// Do not implement local question generators.
-// Do not add static fallback content.
-// Fail safely if Groq fails.
-
 import { GenerateRequest } from "./schemas";
 
 /**
- * Builds the full prompt sent to Groq for quiz generation.
+ * Builds the full prompt sent to an AI provider for quiz generation.
  * Parses the user's natural language prompt for any overrides.
  * Always generates a mix of MCQ and subjective by default.
  */

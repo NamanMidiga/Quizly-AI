@@ -1,7 +1,7 @@
 import Groq from "groq-sdk";
 import { z, ZodSchema } from "zod";
 
-const MODEL = "llama-3.3-70b-versatile";
+const DEFAULT_MODEL = "openai/gpt-oss-120b";
 const TIMEOUT_MS = 60_000;
 
 function getClient(): Groq {
@@ -26,7 +26,7 @@ export async function generateWithGroq<T>(
     try {
       const completion = await client.chat.completions.create(
         {
-          model: MODEL,
+          model: process.env.GROQ_MODEL || DEFAULT_MODEL,
           messages: [
             {
               role: "system",

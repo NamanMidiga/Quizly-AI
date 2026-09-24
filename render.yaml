@@ -8,6 +8,8 @@ services:
     envVars:
       - key: GROQ_API_KEY
         sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
       - key: NODE_ENV
         value: production
       - key: AUTH_SECRET

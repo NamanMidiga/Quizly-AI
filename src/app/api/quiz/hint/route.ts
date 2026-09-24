@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { generateWithGroq } from "@/lib/ai/groqClient";
 import { getQuiz } from "@/lib/memoryDB";
+import { buildHintPrompt } from "@/lib/promptBuilder";
 
 const HintRequestSchema = z.object({
   quizId: z.string(),
   questionId: z.number(),
   hintNumber: z.number().min(1).max(5), // which hint (1st, 2nd, 3rd...)
   previousHints: z.array(z.string()).default([]),
+});
+
+const HintResultSchema = z.object({
+  hint: z.string(),
+  hintLevel: z.number(),
 });
 
 export async function POST(request: NextRequest) {
@@ -21,7 +28,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { quizId, questionId, hintNumber } = parsed.data;
+    const { quizId, questionId, hintNumber, previousHints } = parsed.data;
     const storedQuiz = await getQuiz(quizId);
 
     if (!storedQuiz) {
@@ -50,9 +57,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const result = await generateWithGroq(
+      buildHintPrompt(
+        question.question,
+        question.correctAnswer,
+        question.type,
+        question.options,
+        question.topic,
+        question.difficulty,
+        hintNumber,
+        previousHints
+      ),
+      HintResultSchema
+    );
     return NextResponse.json(
-      { error: "AI hints are temporarily unavailable while the AI provider is being replaced." },
-      { status: 503 }
+      { hint: result.hint, hintLevel: hintNumber },
+      { status: 200 }
     );
   } catch (err) {
     const message =

@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { generateWithGroq } from "@/lib/ai/groqClient";
 import { getAllQuizzes } from "@/lib/memoryDB";
+
+const DashboardRecommendationSchema = z.object({
+  studyPlan: z.string(),
+  priorityTopics: z.array(z.string()),
+  dailyGoal: z.string(),
+  motivationalNote: z.string(),
+  predictedImprovement: z.string(),
+});
 
 export async function GET() {
   try {
@@ -118,6 +128,21 @@ export async function GET() {
       else improvementTrend = "stable";
     }
 
+    let aiRecommendations = null;
+    if (totalQuizzesTaken > 0) {
+      try {
+        const topicSummary = topicMastery
+          .map((topic) => `${topic.topic}: ${topic.accuracy}% (${topic.correct}/${topic.total})`)
+          .join("\n");
+        aiRecommendations = await generateWithGroq(
+          `Analyze this student's quiz performance and return JSON with studyPlan, priorityTopics, dailyGoal, motivationalNote, and predictedImprovement.\n\nTotal quizzes: ${totalQuizzesTaken}\nOverall accuracy: ${overallAccuracy}%\nTrend: ${improvementTrend}\nTopic performance:\n${topicSummary || "No topic data"}`,
+          DashboardRecommendationSchema
+        );
+      } catch {
+        // Dashboard statistics remain available if recommendations fail.
+      }
+    }
+
     return NextResponse.json({
       overview: {
         totalQuizzes: totalQuizzesTaken,
@@ -132,7 +157,7 @@ export async function GET() {
       mediumTopics,
       trendData,
       recentAttempts: allAttempts.slice(-10).reverse(),
-      aiRecommendations: null,
+      aiRecommendations,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

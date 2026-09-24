@@ -2,7 +2,16 @@
 
 import mammoth from "mammoth";
 import { extractText } from "unpdf";
+import Groq from "groq-sdk";
 import JSZip from "jszip";
+
+const VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+
+function getGroqClient(): Groq {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY is not configured");
+  return new Groq({ apiKey });
+}
 
 /**
  * Extract text from a PDF buffer using unpdf (local, fast).
@@ -31,6 +40,24 @@ export async function extractFromDOCX(buffer: Buffer): Promise<string> {
 export function extractFromTXT(buffer: Buffer): string {
   const text = buffer.toString("utf-8").trim();
   if (!text) throw new Error("TXT file is empty");
+  return text;
+}
+
+export async function extractFromImage(buffer: Buffer, mimeType: string): Promise<string> {
+  const completion = await getGroqClient().chat.completions.create({
+    model: VISION_MODEL,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image_url", image_url: { url: `data:${mimeType};base64,${buffer.toString("base64")}` } },
+        { type: "text", text: "Extract all text from this image. Return only the extracted text." },
+      ],
+    }],
+    temperature: 0,
+    max_tokens: 8192,
+  });
+  const text = completion.choices?.[0]?.message?.content?.trim();
+  if (!text || text === "NO_TEXT_FOUND") throw new Error("Could not extract text from image");
   return text;
 }
 
@@ -73,9 +100,18 @@ export async function extractFromPPTX(buffer: Buffer): Promise<string> {
   return fullText;
 }
 
-/**
- * Get MIME type from file extension.
- */
+function getMimeType(ext: string): string {
+  const mimeMap: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    gif: "image/gif",
+  };
+  return mimeMap[ext] || "image/png";
+}
+
 /**
  * Detect file type and extract text accordingly.
  */
@@ -95,9 +131,16 @@ export async function extractTextFromFile(
       return extractFromPPTX(buffer);
     case "txt":
       return extractFromTXT(buffer);
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "webp":
+    case "bmp":
+    case "gif":
+      return extractFromImage(buffer, getMimeType(ext));
     default:
       throw new Error(
-        `Unsupported file type: .${ext}. Supported: PDF, DOCX, PPTX, TXT`
+        `Unsupported file type: .${ext}. Supported: PDF, DOCX, PPTX, TXT, PNG, JPG, JPEG, WEBP`
       );
   }
 }

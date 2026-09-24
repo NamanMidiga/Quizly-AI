@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { generateWithGroq } from "@/lib/ai/groqClient";
+import { z } from "zod";
 import {
   GradeRequestSchema,
   GradedAnswer,
@@ -8,6 +10,7 @@ import {
   QuizAttempt,
 } from "@/lib/schemas";
 import { getQuiz, saveAttempt } from "@/lib/memoryDB";
+import { buildGradePrompt } from "@/lib/promptBuilder";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: NextRequest) {
@@ -103,10 +106,38 @@ export async function POST(request: NextRequest) {
             : `Incorrect. The correct answer is: ${question.correctAnswer}${hintNote}`,
         });
       } else {
-        return NextResponse.json(
-          { error: "Subjective grading is temporarily unavailable while the AI provider is being replaced." },
-          { status: 503 }
+        const SingleGradeSchema = z.object({
+          questionId: z.number(),
+          isCorrect: z.boolean(),
+          marksAwarded: z.number(),
+          feedback: z.string(),
+          rubric: z.string().optional(),
+          keywordsFound: z.array(z.string()).optional(),
+          keywordsMissed: z.array(z.string()).optional(),
+          qualityScore: z.number().min(0).max(100).optional(),
+          strengths: z.string().optional(),
+          improvements: z.string().optional(),
+        });
+
+        const graded = await generateWithGroq(
+          buildGradePrompt(
+            question.question,
+            question.correctAnswer,
+            submission.answer,
+            question.marks,
+            question.keywords,
+            question.sampleAnswer,
+            question.expectedLength
+          ),
+          SingleGradeSchema
         );
+        graded.questionId = question.id;
+        if (hintsUsed > 0) {
+          graded.marksAwarded = Math.min(graded.marksAwarded, effectiveMaxMarks);
+          graded.feedback += ` (${hintsUsed} hint(s) used — max marks capped to ${effectiveMaxMarks})`;
+        }
+        totalScore += graded.marksAwarded;
+        results.push(graded);
       }
     }
 

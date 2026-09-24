@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GenerateRequestSchema } from "@/lib/schemas";
+import { generateWithGroq } from "@/lib/ai/groqClient";
+import { GenerateRequestSchema, QuizSchema } from "@/lib/schemas";
+import { buildGeneratePrompt } from "@/lib/promptBuilder";
+import { saveQuiz } from "@/lib/memoryDB";
+import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,10 +17,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { error: "Quiz generation is temporarily unavailable while the AI provider is being replaced." },
-      { status: 503 }
+    const quiz = await generateWithGroq(
+      buildGeneratePrompt(parsed.data),
+      QuizSchema
     );
+    const missingDifficulty = quiz.questions.some((question) => !question.difficulty);
+    if (missingDifficulty) {
+      return NextResponse.json(
+        { error: "Generated questions are missing required difficulty tags" },
+        { status: 502 }
+      );
+    }
+
+    const stored = await saveQuiz(uuidv4(), quiz);
+    return NextResponse.json({ quizId: stored.id, quiz }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { generateWithGroq } from "@/lib/ai/groqClient";
+import { ExplanationResultSchema } from "@/lib/schemas";
 import { getQuiz } from "@/lib/memoryDB";
+import { buildExplanationPrompt } from "@/lib/promptBuilder";
 
 const ExplainRequestSchema = z.object({
   quizId: z.string(),
@@ -20,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { quizId, questionId } = parsed.data;
+    const { quizId, questionId, studentAnswer } = parsed.data;
     const storedQuiz = await getQuiz(quizId);
 
     if (!storedQuiz) {
@@ -41,10 +44,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { error: "AI explanations are temporarily unavailable while the AI provider is being replaced." },
-      { status: 503 }
+    const explanation = await generateWithGroq(
+      buildExplanationPrompt(
+        question.question,
+        question.correctAnswer,
+        question.type,
+        question.options,
+        studentAnswer,
+        question.topic,
+        question.difficulty
+      ),
+      ExplanationResultSchema
     );
+    return NextResponse.json(explanation, { status: 200 });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Explanation generation failed";
